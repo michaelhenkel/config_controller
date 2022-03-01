@@ -8,9 +8,11 @@ import (
 	contrail "ssd-git.juniper.net/contrail/cn2/contrail/pkg/apis/core/v1alpha1"
 )
 
+/*
 func init() {
 	converterMap["VirtualNetwork"] = &VirtualNetwork{}
 }
+*/
 
 type VirtualNetwork struct {
 	Resource *contrail.VirtualNetwork
