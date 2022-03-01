@@ -9,7 +9,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var converterMap = map[string]Resource{"VirtualNetwork": &VirtualNetwork{}}
+var converterMap = make(map[string]Resource)
 
 type Resource interface {
 	Convert(obj interface{}) error

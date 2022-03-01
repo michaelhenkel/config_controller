@@ -50,5 +50,8 @@ func subscribe(client pbv1.ConfigControllerClient, nodeName string) {
 		if vn := response.GetVirtualNetwork(); vn != nil {
 			klog.Infof("got vn %s", vn.Name)
 		}
+		if vmi := response.GetVirtualMachineInterface(); vmi != nil {
+			klog.Infof("got vmi %s", vmi.Name)
+		}
 	}
 }
