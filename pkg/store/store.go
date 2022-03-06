@@ -13,8 +13,24 @@ func (s Store) Add(resource string, store cache.Store) {
 	s[resource] = store
 }
 
-func (s Store) ListResource(resource string) []interface{} {
-	return s[resource].List()
+type NamespacedName struct {
+	Name      string
+	Namespace string
+}
+
+func (s Store) ListResource(resource string, filter ...string) []interface{} {
+	if len(filter) == 0 {
+		return s[resource].List()
+	} else {
+		var resourceList []interface{}
+		for _, f := range filter {
+			item, exists, _ := s[resource].GetByKey(f)
+			if exists {
+				resourceList = append(resourceList, item)
+			}
+		}
+		return resourceList
+	}
 }
 
 func (s Store) List() []interface{} {

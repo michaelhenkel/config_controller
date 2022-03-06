@@ -10,6 +10,13 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go"
+        },
+        {
+            "name": "test",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "pkg/graph/test/main.go"
         }
     ]
 }

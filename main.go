@@ -13,12 +13,9 @@ import (
 
 	"github.com/michaelhenkel/config_controller/pkg/handlers"
 	"github.com/michaelhenkel/config_controller/pkg/server"
-	"github.com/michaelhenkel/config_controller/pkg/store"
 	"google.golang.org/grpc"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -27,6 +24,7 @@ import (
 	"k8s.io/klog/v2"
 
 	pbv1 "github.com/michaelhenkel/config_controller/pkg/apis/v1"
+	"github.com/michaelhenkel/config_controller/pkg/db"
 	contrailClient "ssd-git.juniper.net/contrail/cn2/contrail/pkg/client/clientset_generated/clientset"
 	contrailInformer "ssd-git.juniper.net/contrail/cn2/contrail/pkg/client/informers_generated/externalversions"
 )
@@ -45,11 +43,18 @@ type ClientSet struct {
 	Dynamic  dynamic.Interface
 }
 
+type gvrKind struct {
+	gvr  schema.GroupVersionResource
+	kind string
+}
+
 func main() {
 	var stopCh = make(chan struct{})
 	var newSubscriberChan = make(chan string)
 	subscriptionManager := server.NewSubscriptionManager(newSubscriberChan)
-	go ClientWatch(stopCh, subscriptionManager)
+	dbClient := db.NewClient()
+	go dbClient.Start()
+	go ClientWatch(stopCh, subscriptionManager, dbClient)
 	go RunGRPCServer(subscriptionManager)
 	<-stopCh
 }
@@ -86,39 +91,40 @@ func NewClientSet() (*ClientSet, error) {
 		Dynamic:  dynamicClientSet,
 	}, nil
 }
-func NewSharedInformerFactory2(clientSet *ClientSet, subscriptionManager *server.SubscriptionManager, storeClient store.Store) (map[string]cache.SharedInformer, error) {
+func NewSharedInformerFactory(clientSet *ClientSet, dbClient *db.DB, mu *sync.RWMutex, synced *bool) (map[string]cache.SharedInformer, error) {
+	resyncTimer := time.Minute * 10
 	gvrMap, err := getGVRMap(clientSet)
 	if err != nil {
 		return nil, err
 	}
 
 	var sharedInformerMap = make(map[string]cache.SharedInformer)
-	kubeFactory := informers.NewSharedInformerFactory(clientSet.Kube, time.Minute*10)
-	namespaceInformer := kubeFactory.Core().V1().Namespaces().Informer()
-	storeClient.Add("namespaces", namespaceInformer.GetStore())
-	namespaceInformer.AddEventHandler(resourceEventHandler(&watchHandlerFunc{
-		Handler: handlers.NewHandler(subscriptionManager, storeClient),
-	}))
-	sharedInformerMap["namespaces"] = namespaceInformer
 
-	contrailFactory := contrailInformer.NewSharedInformerFactory(clientSet.Contrail, time.Minute*10)
+	/*
+		kubeFactory := informers.NewSharedInformerFactory(clientSet.Kube, resyncTimer)
+		namespaceInformer := kubeFactory.Core().V1().Namespaces().Informer()
+		storeClient.Add("Namespace", namespaceInformer.GetStore())
+		namespaceInformer.AddEventHandler(resourceEventHandler(handlers.NewHandler("Namespace"), mu, synced))
+		sharedInformerMap["Namespace"] = namespaceInformer
+	*/
+
+	handledResources := handlers.GetHandledResources()
+	contrailFactory := contrailInformer.NewSharedInformerFactory(clientSet.Contrail, resyncTimer)
 	for _, gvr := range gvrMap {
-		cInformer, err := contrailFactory.ForResource(gvr)
-		if err != nil {
-			return nil, err
+		if _, ok := handledResources[gvr.kind]; ok {
+			cInformer, err := contrailFactory.ForResource(gvr.gvr)
+			if err != nil {
+				return nil, err
+			}
+			cInformer.Informer().AddEventHandler(resourceEventHandler(handlers.NewHandler(gvr.kind, dbClient), mu, synced))
+			sharedInformerMap[gvr.kind] = cInformer.Informer()
 		}
-		storeClient.Add(gvr.Resource, cInformer.Informer().GetStore())
-		cInformer.Informer().AddEventHandler(resourceEventHandler(&watchHandlerFunc{
-			Handler: handlers.NewHandler(subscriptionManager, storeClient),
-		}))
-
-		sharedInformerMap[gvr.Resource] = cInformer.Informer()
 	}
 	return sharedInformerMap, nil
 }
 
-func getGVRMap(clientSet *ClientSet) (map[string]schema.GroupVersionResource, error) {
-	var gvrMap = make(map[string]schema.GroupVersionResource)
+func getGVRMap(clientSet *ClientSet) (map[string]gvrKind, error) {
+	var gvrMap = make(map[string]gvrKind)
 	contrailResources, err := clientSet.Contrail.DiscoveryClient.ServerResourcesForGroupVersion("core.contrail.juniper.net/v1alpha1")
 	if err != nil {
 		return nil, err
@@ -126,81 +132,77 @@ func getGVRMap(clientSet *ClientSet) (map[string]schema.GroupVersionResource, er
 
 	for _, contrailResource := range contrailResources.APIResources {
 		resourceNameList := strings.Split(contrailResource.Name, "/status")
-		gvrMap[resourceNameList[0]] = schema.GroupVersionResource{
-			Group:    "core.contrail.juniper.net",
-			Version:  "v1alpha1",
-			Resource: resourceNameList[0],
+		gvrMap[resourceNameList[0]] = gvrKind{
+			gvr: schema.GroupVersionResource{
+				Group:    "core.contrail.juniper.net",
+				Version:  "v1alpha1",
+				Resource: resourceNameList[0],
+			},
+			kind: contrailResource.Kind,
 		}
 	}
 	return gvrMap, nil
 }
 
-type watchHandlerFunc struct {
-	Handler *handlers.Handler
-}
-
-func (h *watchHandlerFunc) HandleEvent(eventType int, res *unstructured.Unstructured) error {
-	return nil
-}
-
-func (h *watchHandlerFunc) HandleAddEvent(obj interface{}) error {
-	return h.Handler.Update(obj)
-}
-
-func (h *watchHandlerFunc) HandleUpdateEvent(oldRes *unstructured.Unstructured, newRes *unstructured.Unstructured) error {
-	return nil
-}
-
-func (h *watchHandlerFunc) HandleDeleteEvent(res *unstructured.Unstructured) error {
-	return nil
-}
-
-func resourceEventHandler(handler WatchEventHandler) cache.ResourceEventHandler {
+func resourceEventHandler(handler handlers.Handler, mux *sync.RWMutex, synced *bool) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			handler.HandleAddEvent(obj)
+			mux.RLock()
+			defer mux.RUnlock()
+			handler.Add(obj)
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			handler.HandleAddEvent(newObj)
+			mux.RLock()
+			defer mux.RUnlock()
+			handler.Update(newObj, oldObj)
 
 		},
 		DeleteFunc: func(obj interface{}) {
-			res, ok := obj.(*unstructured.Unstructured)
-			if ok {
-				handler.HandleDeleteEvent(res)
-			}
-
+			mux.RLock()
+			defer mux.RUnlock()
+			handler.Delete(obj)
 		},
 	}
 }
 
-type WatchEventHandler interface {
-	HandleEvent(eventType int, res *unstructured.Unstructured) error
-	HandleAddEvent(obj interface{}) error
-	HandleUpdateEvent(oldRes *unstructured.Unstructured, newRes *unstructured.Unstructured) error
-	HandleDeleteEvent(res *unstructured.Unstructured) error
+func cacheSynced(syncMap map[string]bool) bool {
+	for _, isSynced := range syncMap {
+		if !isSynced {
+			return false
+		}
+	}
+	return true
 }
 
-func ClientWatch(stopChan chan struct{}, subscriptionManager *server.SubscriptionManager) error {
+func ClientWatch(stopChan chan struct{}, subscriptionManager *server.SubscriptionManager, dbClient *db.DB) error {
 	klog.Info("starting client watch")
 	clientSet, err := NewClientSet()
 	if err != nil {
 		return err
 	}
-	storeClient := store.New()
-	sharedInformerMap, err := NewSharedInformerFactory2(clientSet, subscriptionManager, storeClient)
+	mux := &sync.RWMutex{}
+	synced := false
+	sharedInformerMap, err := NewSharedInformerFactory(clientSet, dbClient, mux, &synced)
 
 	var syncMap = make(map[string]bool)
-	mux := &sync.RWMutex{}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	store := store.New()
+
+	mux.Lock()
 	for resource, sharedInformer := range sharedInformerMap {
-		store.Add(resource, sharedInformer.GetStore())
+		dbClient.AddStore(resource, sharedInformer.GetStore())
 		go sharedInformer.Run(ctx.Done())
 		isSynced := cache.WaitForCacheSync(ctx.Done(), sharedInformer.HasSynced)
-		mux.Lock()
 		syncMap[resource] = isSynced
+	}
+
+	if cacheSynced(syncMap) {
+		for kind, handler := range handlers.GetHandledResources() {
+			dbClient.AddHandlerInterface(kind, handler)
+		}
+		dbClient.Init()
+		klog.Info("starting watch in 1 sec")
+		time.Sleep(time.Second * 1)
 		mux.Unlock()
 	}
 
@@ -210,21 +212,8 @@ func ClientWatch(stopChan chan struct{}, subscriptionManager *server.Subscriptio
 		}
 	}
 
-	go HandleNewSubscriber(store, subscriptionManager)
+	//go HandleNewSubscriber(store, subscriptionManager, graph)
 	<-ctx.Done()
-	return nil
-}
-
-func HandleNewSubscriber(storeClient store.Store, subscriptionManager *server.SubscriptionManager) error {
-	hdl := handlers.NewHandler(subscriptionManager, storeClient)
-	for node := range subscriptionManager.NewSubscriberChan {
-		list := storeClient.List()
-		for _, item := range list {
-			if err := hdl.Init(item, node); err != nil {
-				klog.Error(err)
-			}
-		}
-	}
 	return nil
 }
 

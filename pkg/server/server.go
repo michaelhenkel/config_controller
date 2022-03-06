@@ -20,7 +20,7 @@ func (sm *SubscriptionManager) RemoveSubscription(node string) {
 	delete(sm.Subscriptions, node)
 }
 
-func (sm *SubscriptionManager) GetSubscriptionChannel(node string) chan *pbv1.Resource {
+func (sm *SubscriptionManager) GetSubscriptionChannel(node string) chan *pbv1.Response {
 	if subscription, ok := sm.Subscriptions[node]; ok {
 		return subscription.Channel
 	}
@@ -36,24 +36,24 @@ func NewSubscriptionManager(newSubscriberChan chan string) *SubscriptionManager 
 }
 
 type Subscription struct {
-	Channel chan *pbv1.Resource
+	Channel chan *pbv1.Response
 	Init    bool
 }
 
-type configControllerServer struct {
+type ConfigController struct {
 	pbv1.UnimplementedConfigControllerServer
 	SubscriptionManager *SubscriptionManager
 }
 
-func New(subscriptionManager *SubscriptionManager) *configControllerServer {
-	s := &configControllerServer{
+func New(subscriptionManager *SubscriptionManager) *ConfigController {
+	s := &ConfigController{
 		SubscriptionManager: subscriptionManager,
 	}
 	return s
 }
 
-func (c *configControllerServer) SubscribeListWatch(req *pbv1.SubscriptionRequest, srv pbv1.ConfigController_SubscribeListWatchServer) error {
-	conn := make(chan *pbv1.Resource)
+func (c *ConfigController) SubscribeListWatch(req *pbv1.SubscriptionRequest, srv pbv1.ConfigController_SubscribeListWatchServer) error {
+	conn := make(chan *pbv1.Response)
 	c.SubscriptionManager.AddSubscription(req.Name, Subscription{
 		Channel: conn,
 		Init:    false,

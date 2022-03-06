@@ -47,11 +47,34 @@ func subscribe(client pbv1.ConfigControllerClient, nodeName string) {
 		if err != nil {
 			log.Fatalf("%v.req(_) = _, %v", client, err)
 		}
-		if vn := response.GetVirtualNetwork(); vn != nil {
-			klog.Infof("got vn %s", vn.Name)
+		switch response.Action {
+		case pbv1.Response_ADD:
+			add(response)
+		case pbv1.Response_UPDATE:
+			update(response)
 		}
-		if vmi := response.GetVirtualMachineInterface(); vmi != nil {
-			klog.Infof("got vmi %s", vmi.Name)
-		}
+	}
+}
+
+func update(response *pbv1.Response) error {
+	switch t := response.New.Resource.(type) {
+	case *pbv1.Resource_VirtualNetwork:
+		klog.Infof("got vn update: new %s old %s", t.VirtualNetwork.Name, response.Old.GetVirtualNetwork().Name)
+	case *pbv1.Resource_VirtualMachineInterface:
+		klog.Infof("got vmi update: new %s old %s", t.VirtualMachineInterface.Name, response.Old.GetVirtualMachineInterface().Name)
+	case *pbv1.Resource_VirtualRouter:
+		klog.Infof("got vrouter update: new %s old %s", t.VirtualRouter.Name, response.Old.GetVirtualRouter().Name)
+	}
+	return nil
+}
+
+func add(response *pbv1.Response) {
+	switch t := response.New.Resource.(type) {
+	case *pbv1.Resource_VirtualNetwork:
+		klog.Infof("got vn %s add", t.VirtualNetwork.Name)
+	case *pbv1.Resource_VirtualMachineInterface:
+		klog.Infof("got vmi %s add", t.VirtualMachineInterface.Name)
+	case *pbv1.Resource_VirtualRouter:
+		klog.Infof("got vrouter %s add", t.VirtualRouter.Name)
 	}
 }
