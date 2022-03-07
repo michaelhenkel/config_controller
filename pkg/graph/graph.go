@@ -114,7 +114,7 @@ func (g *ItemGraph) Traverse(f func(*Node)) {
 	g.lock.RUnlock()
 }
 
-func (g *ItemGraph) TraverseFrom(from *Node, f func(*Node), filterList ...string) {
+func (g *ItemGraph) TraverseFrom(from *Node, to string, f func(*Node), filterList ...string) {
 	var filterMap = make(map[string]struct{})
 	var filter bool
 	if len(filterList) > 0 {
@@ -143,19 +143,20 @@ func (g *ItemGraph) TraverseFrom(from *Node, f func(*Node), filterList ...string
 		}
 		node := q.Dequeue()
 		visited[*node] = true
-		near := g.edges[*node]
-
-		for i := 0; i < len(near); i++ {
-			j := near[i]
-			ignore := false
-			if filter {
-				if _, ok := filterMap[j.kind]; !ok {
-					ignore = true
+		if node.kind != to {
+			near := g.edges[*node]
+			for i := 0; i < len(near); i++ {
+				j := near[i]
+				ignore := false
+				if filter {
+					if _, ok := filterMap[j.kind]; !ok {
+						ignore = true
+					}
 				}
-			}
-			if !visited[*j] && !ignore {
-				q.Enqueue(*j)
-				visited[*j] = true
+				if !visited[*j] && !ignore {
+					q.Enqueue(*j)
+					visited[*j] = true
+				}
 			}
 		}
 		if f != nil {

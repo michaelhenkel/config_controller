@@ -76,7 +76,13 @@ func (r *VirtualNetwork) Add(obj interface{}) error {
 	if r.NewResource.Namespace != "" {
 		namespacedName = fmt.Sprintf("%s/%s", r.NewResource.Namespace, r.NewResource.Name)
 	}
-	nList := r.dbClient.Get(namespacedName, r.kind, "VirtualRouter", "VirtualMachine", "VirtualMachineInterface", "VirtualNetwork", "VirtualRouter")
+	search := &db.Search{
+		Name:    namespacedName,
+		Kind:    r.kind,
+		DstKind: "VirtualRouter",
+		Filter:  []string{"VirtualMachine", "VirtualMachineInterface", "VirtualRouter"},
+	}
+	nList := r.dbClient.Get(search)
 	for _, n := range nList {
 		klog.Infof("%s -> %s is on %s -> %s", r.kind, namespacedName, n.Kind(), n.String())
 	}

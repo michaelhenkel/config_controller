@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"fmt"
-
 	"github.com/michaelhenkel/config_controller/pkg/db"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
@@ -71,14 +69,16 @@ func (r *VirtualMachineInterface) Add(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	var namespacedName string
-	if r.NewResource.Namespace != "" {
-		namespacedName = fmt.Sprintf("%s/%s", r.NewResource.Namespace, r.NewResource.Name)
-	}
-	nList := r.dbClient.Get(namespacedName, r.kind, "VirtualRouter", "VirtualMachine", "VirtualRouter")
-	for _, n := range nList {
-		klog.Infof("%s -> %s is on %s -> %s", r.kind, namespacedName, n.Kind(), n.String())
-	}
+	/*
+		var namespacedName string
+		if r.NewResource.Namespace != "" {
+			namespacedName = fmt.Sprintf("%s/%s", r.NewResource.Namespace, r.NewResource.Name)
+		}
+		nList := r.dbClient.Get(namespacedName, r.kind, "VirtualRouter", "VirtualMachine", "VirtualRouter")
+		for _, n := range nList {
+			klog.Infof("%s -> %s is on %s -> %s", r.kind, namespacedName, n.Kind(), n.String())
+		}
+	*/
 	return nil
 }
 

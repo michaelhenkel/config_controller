@@ -56,13 +56,20 @@ func (d *DB) AddStore(resource string, store cache.Store) {
 	d.stores[resource] = store
 }
 
-func (d *DB) Get(name, kind string, dstKind string, filter ...string) []*graph.Node {
+type Search struct {
+	Name    string
+	Kind    string
+	DstKind string
+	Filter  []string
+}
+
+func (d *DB) Get(search *Search) []*graph.Node {
 	var nodeList []*graph.Node
-	d.graph.TraverseFrom(graph.NewNode(name, kind), func(n *graph.Node) {
-		if n.Kind() == dstKind {
+	d.graph.TraverseFrom(graph.NewNode(search.Name, search.Kind), search.DstKind, func(n *graph.Node) {
+		if n.Kind() == search.DstKind {
 			nodeList = append(nodeList, n)
 		}
-	}, filter...)
+	}, search.Filter...)
 	return nodeList
 }
 
@@ -87,6 +94,19 @@ func (d *DB) Init() {
 	for res, store := range d.stores {
 		items := store.List()
 		for _, item := range items {
+			var srcNode *graph.Node
+			obj, ok := item.(metav1.Object)
+			if ok {
+				var srcNamespacedName string
+				if obj.GetNamespace() != "" {
+					srcNamespacedName = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
+				} else {
+					srcNamespacedName = obj.GetName()
+				}
+				if srcNode, ok = d.graph.GetNode(res, srcNamespacedName); !ok {
+					continue
+				}
+			}
 			referenceList := d.handlerInterfaceMap[res].GetReferences(item)
 			for _, ref := range referenceList {
 				var dstNamespacedName string
@@ -96,18 +116,12 @@ func (d *DB) Init() {
 					dstNamespacedName = ref.Name
 				}
 				if dstNode, ok := d.graph.GetNode(ref.Kind, dstNamespacedName); ok {
-					obj, ok := item.(metav1.Object)
-					if ok {
-						var srcNamespacedName string
-						if obj.GetNamespace() != "" {
-							srcNamespacedName = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
-						} else {
-							srcNamespacedName = obj.GetName()
-						}
-						if srcNode, ok := d.graph.GetNode(res, srcNamespacedName); ok {
-							d.graph.AddEdge(srcNode, dstNode)
-							klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
-						}
+					d.graph.AddEdge(srcNode, dstNode)
+					//if srcNode.Kind() == "VirtualMachineInterface" && srcNode.String() == "ns1/pod-ns1-7f7341b9" {
+					//	klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
+					//}
+					if dstNode.Kind() == "VirtualMachine" && dstNode.String() == "contrail-k8s-kubemanager-cluster1-local-pod-ns1-c2dbc0ed" {
+						klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
 					}
 				}
 			}
