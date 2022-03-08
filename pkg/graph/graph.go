@@ -7,23 +7,9 @@ import (
 
 // Node a single node that composes the tree
 type Node struct {
-	name string
-	kind string
-}
-
-func NewNode(name, kind string) *Node {
-	return &Node{
-		name: name,
-		kind: kind,
-	}
-}
-
-func (n *Node) String() string {
-	return fmt.Sprintf("%v", n.name)
-}
-
-func (n *Node) Kind() string {
-	return n.kind
+	Name      string
+	Namespace string
+	Kind      string
 }
 
 // ItemGraph the Items graph
@@ -41,11 +27,11 @@ func (g *ItemGraph) AddNode(n *Node) {
 }
 
 // AddNode adds a node to the graph
-func (g *ItemGraph) GetNode(kind, name string) (*Node, bool) {
+func (g *ItemGraph) GetNode(name, namespace, kind string) (*Node, bool) {
 	var node *Node
 	g.lock.Lock()
 	for _, n := range g.nodes {
-		if n.kind == kind && n.name == name {
+		if n.Kind == kind && n.Name == name && n.Namespace == namespace {
 			node = n
 		}
 	}
@@ -72,10 +58,10 @@ func (g *ItemGraph) String() {
 	g.lock.RLock()
 	s := ""
 	for i := 0; i < len(g.nodes); i++ {
-		s += g.nodes[i].String() + " -> "
+		s += g.nodes[i].Name + " -> "
 		near := g.edges[*g.nodes[i]]
 		for j := 0; j < len(near); j++ {
-			s += near[j].String() + " "
+			s += near[j].Name + " "
 		}
 		s += "\n"
 	}
@@ -114,7 +100,7 @@ func (g *ItemGraph) Traverse(f func(*Node)) {
 	g.lock.RUnlock()
 }
 
-func (g *ItemGraph) TraverseFrom(from *Node, to string, f func(*Node), filterList ...string) {
+func (g *ItemGraph) TraverseFrom(from *Node, to *Node, f func(*Node), filterList ...string) {
 	var filterMap = make(map[string]struct{})
 	var filter bool
 	if len(filterList) > 0 {
@@ -128,7 +114,7 @@ func (g *ItemGraph) TraverseFrom(from *Node, to string, f func(*Node), filterLis
 	q.New()
 	var n *Node
 	for idx, node := range g.nodes {
-		if g.nodes[idx].kind == from.kind && g.nodes[idx].name == from.name {
+		if g.nodes[idx].Kind == from.Kind && g.nodes[idx].Name == from.Name && g.nodes[idx].Namespace == from.Namespace {
 			n = node
 		}
 	}
@@ -143,13 +129,13 @@ func (g *ItemGraph) TraverseFrom(from *Node, to string, f func(*Node), filterLis
 		}
 		node := q.Dequeue()
 		visited[*node] = true
-		if node.kind != to {
+		if node.Kind != to.Kind {
 			near := g.edges[*node]
 			for i := 0; i < len(near); i++ {
 				j := near[i]
 				ignore := false
 				if filter {
-					if _, ok := filterMap[j.kind]; !ok {
+					if _, ok := filterMap[j.Kind]; !ok {
 						ignore = true
 					}
 				}

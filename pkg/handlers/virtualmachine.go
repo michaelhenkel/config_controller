@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	pbv1 "github.com/michaelhenkel/config_controller/pkg/apis/v1"
 	"github.com/michaelhenkel/config_controller/pkg/db"
+	"github.com/michaelhenkel/config_controller/pkg/graph"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
 	contrail "ssd-git.juniper.net/contrail/cn2/contrail/pkg/apis/core/v1alpha1"
@@ -12,19 +14,19 @@ func init() {
 }
 
 type VirtualMachine struct {
-	NewResource *contrail.VirtualMachine
-	OldResource *contrail.VirtualMachine
-	kind        string
-	dbClient    *db.DB
+	*contrail.VirtualMachine
+	old      *contrail.VirtualMachine
+	kind     string
+	dbClient *db.DB
 }
 
 func (r *VirtualMachine) Convert(newObj interface{}, oldObj interface{}) error {
 	r.kind = "VirtualMachine"
 	if newObj != nil {
-		r.NewResource = newObj.(*contrail.VirtualMachine)
+		r.VirtualMachine = newObj.(*contrail.VirtualMachine)
 	}
 	if oldObj != nil {
-		r.OldResource = oldObj.(*contrail.VirtualMachine)
+		r.VirtualMachine = oldObj.(*contrail.VirtualMachine)
 	}
 	return nil
 }
@@ -37,14 +39,6 @@ func (r *VirtualMachine) addKind(kind string) {
 	r.kind = kind
 }
 
-func (r *VirtualMachine) Init() error {
-	return nil
-}
-
-func (r *VirtualMachine) InitEdges() error {
-	return nil
-}
-
 func (r *VirtualMachine) GetReferences(obj interface{}) []contrail.ResourceReference {
 	var resourceReferenceList []contrail.ResourceReference
 	return resourceReferenceList
@@ -54,8 +48,53 @@ func (r *VirtualMachine) Add(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	//klog.Infof("adding %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
 	return nil
+}
+
+func NewVirtualMachine(dbClient *db.DB) *VirtualMachine {
+	return &VirtualMachine{
+		dbClient: dbClient,
+		kind:     "VirtualMachine",
+	}
+}
+
+func (r *VirtualMachine) ListResponses(node string) []pbv1.Response {
+	var responses []pbv1.Response
+	virtualMachine := NewVirtualMachine(r.dbClient)
+	virtualMachineList := virtualMachine.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface"})
+	for _, vm := range virtualMachineList {
+		response := &pbv1.Response{
+			New: &pbv1.Resource{
+				Resource: &pbv1.Resource_VirtualMachine{
+					VirtualMachine: vm.VirtualMachine,
+				},
+			},
+		}
+		responses = append(responses, *response)
+	}
+	return responses
+}
+
+func (r *VirtualMachine) Search(name, namespace, kind string, path []string) []*VirtualMachine {
+	var resList []*VirtualMachine
+
+	nodeList := r.dbClient.Search(&graph.Node{
+		Name:      name,
+		Namespace: namespace,
+		Kind:      kind,
+	},
+		&graph.Node{
+			Kind: r.kind,
+		}, path)
+
+	for idx := range nodeList {
+		n := r.dbClient.Get("VirtualMachine", nodeList[idx].Name)
+		if r, ok := n.(*contrail.VirtualMachine); ok {
+			virtualMachine := &VirtualMachine{VirtualMachine: r}
+			resList = append(resList, virtualMachine)
+		}
+	}
+	return resList
 }
 
 func (r *VirtualMachine) Update(newObj interface{}, oldObj interface{}) error {
@@ -63,8 +102,8 @@ func (r *VirtualMachine) Update(newObj interface{}, oldObj interface{}) error {
 		return err
 	}
 
-	if !equality.Semantic.DeepDerivative(r.NewResource, r.OldResource) {
-		klog.Infof("updating %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	if !equality.Semantic.DeepDerivative(r.VirtualMachine, r.old) {
+		klog.Infof("updating %s: %s/%s", r.kind, r.Namespace, r.Name)
 		return nil
 	}
 
@@ -75,6 +114,6 @@ func (r *VirtualMachine) Delete(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	klog.Infof("deleting %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	klog.Infof("deleting %s: %s/%s", r.kind, r.Namespace, r.Name)
 	return nil
 }

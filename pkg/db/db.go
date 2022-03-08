@@ -56,21 +56,22 @@ func (d *DB) AddStore(resource string, store cache.Store) {
 	d.stores[resource] = store
 }
 
-type Search struct {
-	Name    string
-	Kind    string
-	DstKind string
-	Filter  []string
-}
-
-func (d *DB) Get(search *Search) []*graph.Node {
+func (d *DB) Search(from *graph.Node, to *graph.Node, filter []string) []*graph.Node {
 	var nodeList []*graph.Node
-	d.graph.TraverseFrom(graph.NewNode(search.Name, search.Kind), search.DstKind, func(n *graph.Node) {
-		if n.Kind() == search.DstKind {
+	d.graph.TraverseFrom(from, to, func(n *graph.Node) {
+		if n.Kind == to.Kind {
 			nodeList = append(nodeList, n)
 		}
-	}, search.Filter...)
+	}, filter...)
 	return nodeList
+}
+
+func (d *DB) Get(kind, key string) interface{} {
+	item, ok, _ := d.stores[kind].GetByKey(key)
+	if ok {
+		return item
+	}
+	return nil
 }
 
 func (d *DB) Init() {
@@ -79,15 +80,9 @@ func (d *DB) Init() {
 		for _, item := range items {
 			obj, ok := item.(metav1.Object)
 			if ok {
-				var namespacedName string
-				if obj.GetNamespace() != "" {
-					namespacedName = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
-				} else {
-					namespacedName = obj.GetName()
-				}
-				n := graph.NewNode(namespacedName, res)
+				n := &graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res}
 				d.graph.AddNode(n)
-				klog.Infof("added %s node %s", res, namespacedName)
+				klog.Infof("added %s node %s/%s", res, obj.GetNamespace(), obj.GetName())
 			}
 		}
 	}
@@ -97,31 +92,19 @@ func (d *DB) Init() {
 			var srcNode *graph.Node
 			obj, ok := item.(metav1.Object)
 			if ok {
-				var srcNamespacedName string
-				if obj.GetNamespace() != "" {
-					srcNamespacedName = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
-				} else {
-					srcNamespacedName = obj.GetName()
-				}
-				if srcNode, ok = d.graph.GetNode(res, srcNamespacedName); !ok {
+				if srcNode, ok = d.graph.GetNode(obj.GetName(), obj.GetNamespace(), res); !ok {
 					continue
 				}
 			}
 			referenceList := d.handlerInterfaceMap[res].GetReferences(item)
 			for _, ref := range referenceList {
-				var dstNamespacedName string
-				if ref.Namespace != "" {
-					dstNamespacedName = fmt.Sprintf("%s/%s", ref.Namespace, ref.Name)
-				} else {
-					dstNamespacedName = ref.Name
-				}
-				if dstNode, ok := d.graph.GetNode(ref.Kind, dstNamespacedName); ok {
+				if dstNode, ok := d.graph.GetNode(ref.Name, ref.Namespace, ref.Kind); ok {
 					d.graph.AddEdge(srcNode, dstNode)
 					//if srcNode.Kind() == "VirtualMachineInterface" && srcNode.String() == "ns1/pod-ns1-7f7341b9" {
 					//	klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
 					//}
-					if dstNode.Kind() == "VirtualMachine" && dstNode.String() == "contrail-k8s-kubemanager-cluster1-local-pod-ns1-c2dbc0ed" {
-						klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
+					if dstNode.Kind == "VirtualMachine" && dstNode.Name == "contrail-k8s-kubemanager-cluster1-local-pod-ns1-c2dbc0ed" {
+						klog.Infof("added edge from %s %s to %s %s", srcNode.Kind, srcNode.Name, dstNode.Kind, dstNode.Name)
 					}
 				}
 			}
@@ -151,14 +134,8 @@ func (d *DB) run() {
 	for ctrl := range d.ctrlChan {
 		switch ctrl.action {
 		case add:
-			var namespacedName string
-			if ctrl.namespace != "" {
-				namespacedName = fmt.Sprintf("%s/%s", ctrl.namespace, ctrl.name)
-			} else {
-				namespacedName = ctrl.name
-			}
-			if _, ok := d.graph.GetNode(ctrl.kind, namespacedName); !ok {
-				d.graph.AddNode(graph.NewNode(namespacedName, ctrl.kind))
+			if _, ok := d.graph.GetNode(ctrl.name, ctrl.namespace, ctrl.kind); !ok {
+				d.graph.AddNode(&graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind})
 			}
 		}
 	}

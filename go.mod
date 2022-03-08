@@ -3,11 +3,10 @@ module github.com/michaelhenkel/config_controller
 go 1.16
 
 require (
-	github.com/autom8ter/dagger v1.0.1
 	github.com/golang/protobuf v1.4.3
 	//github.com/gogo/protobuf v1.3.2
 	//github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-cmp v0.5.5
+	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -23,6 +22,7 @@ require (
 	k8s.io/api v0.21.0 // indirect
 	k8s.io/apimachinery v0.21.0
 	k8s.io/client-go v0.21.0
+	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.10.0
 	ssd-git.juniper.net/contrail/cn2/contrail v0.0.0-00010101000000-000000000000
 )

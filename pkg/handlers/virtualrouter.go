@@ -1,13 +1,9 @@
 package handlers
 
 import (
-	"fmt"
-
-	"github.com/google/go-cmp/cmp"
 	pbv1 "github.com/michaelhenkel/config_controller/pkg/apis/v1"
 	"github.com/michaelhenkel/config_controller/pkg/db"
-	"github.com/michaelhenkel/config_controller/pkg/server"
-	"github.com/michaelhenkel/config_controller/pkg/store"
+	"github.com/michaelhenkel/config_controller/pkg/graph"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -19,29 +15,28 @@ func init() {
 }
 
 type VirtualRouter struct {
-	NewResource *contrail.VirtualRouter
-	OldResource *contrail.VirtualRouter
-	kind        string
-	dbClient    *db.DB
+	*contrail.VirtualRouter
+	old      *contrail.VirtualRouter
+	kind     string
+	dbClient *db.DB
 }
 
 func (r *VirtualRouter) Convert(newObj interface{}, oldObj interface{}) error {
 	if newObj != nil {
-		r.NewResource = newObj.(*contrail.VirtualRouter)
+		r.VirtualRouter = newObj.(*contrail.VirtualRouter)
 	}
 	if oldObj != nil {
-		r.OldResource = oldObj.(*contrail.VirtualRouter)
+		r.old = oldObj.(*contrail.VirtualRouter)
 	}
 	r.kind = "VirtualRouter"
 	return nil
 }
 
-func (r *VirtualRouter) Init() error {
-	return nil
-}
-
-func (r *VirtualRouter) InitEdges() error {
-	return nil
+func NewVirtualRouter(dbClient *db.DB) *VirtualRouter {
+	return &VirtualRouter{
+		dbClient: dbClient,
+		kind:     "VirtualRouter",
+	}
 }
 
 func (r *VirtualRouter) addDBClient(dbClient *db.DB) {
@@ -67,7 +62,6 @@ func (r *VirtualRouter) Add(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	//klog.Infof("adding %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
 	return nil
 }
 
@@ -76,8 +70,8 @@ func (r *VirtualRouter) Update(newObj interface{}, oldObj interface{}) error {
 		return err
 	}
 
-	if !equality.Semantic.DeepDerivative(r.NewResource, r.OldResource) {
-		klog.Infof("updating %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	if !equality.Semantic.DeepDerivative(r.VirtualRouter, r.old) {
+		klog.Infof("updating %s: %s/%s", r.kind, r.Namespace, r.Name)
 		return nil
 	}
 
@@ -88,8 +82,29 @@ func (r *VirtualRouter) Delete(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	klog.Infof("deleting %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	klog.Infof("deleting %s: %s/%s", r.kind, r.Namespace, r.Name)
 	return nil
+}
+
+func (r *VirtualRouter) Search(name, namespace, kind string, path []string) []*VirtualRouter {
+	var resList []*VirtualRouter
+	nodeList := r.dbClient.Search(&graph.Node{
+		Name:      name,
+		Namespace: namespace,
+		Kind:      kind,
+	},
+		&graph.Node{
+			Kind: r.kind,
+		}, path)
+
+	for idx := range nodeList {
+		n := r.dbClient.Get(r.kind, nodeList[idx].Name)
+		if r, ok := n.(*contrail.VirtualRouter); ok {
+			virtualRouter := &VirtualRouter{VirtualRouter: r}
+			resList = append(resList, virtualRouter)
+		}
+	}
+	return resList
 }
 
 func diffRefs(a []contrail.ResourceReference, b []contrail.ResourceReference) ([]contrail.ResourceReference, []contrail.ResourceReference) {
@@ -116,35 +131,19 @@ func diffRefs(a []contrail.ResourceReference, b []contrail.ResourceReference) ([
 	return notInA, notInB
 }
 
-func (r *VirtualRouter) sendResponse(subscriptionManager *server.SubscriptionManager, storeClient store.Store, action pbv1.Response_Action, vrouterFilter ...string) {
-	objResource := &pbv1.Resource_VirtualRouter{
-		VirtualRouter: r.NewResource,
-	}
-	response := &pbv1.Response{
-		New: &pbv1.Resource{
-			Resource: objResource,
-		},
-	}
-	switch action {
-	case pbv1.Response_UPDATE:
-		objResource := &pbv1.Resource_VirtualRouter{
-			VirtualRouter: r.OldResource,
+func (r *VirtualRouter) ListResponses(node string) []pbv1.Response {
+	var responses []pbv1.Response
+	virtualRouter := NewVirtualRouter(r.dbClient)
+	virtualRouterList := virtualRouter.Search(node, "", "VirtualRouter", []string{})
+	for _, vr := range virtualRouterList {
+		response := &pbv1.Response{
+			New: &pbv1.Resource{
+				Resource: &pbv1.Resource_VirtualRouter{
+					VirtualRouter: vr.VirtualRouter,
+				},
+			},
 		}
-		response.Old = &pbv1.Resource{
-			Resource: objResource,
-		}
-		response.Action = pbv1.Response_UPDATE
-		fmt.Println(cmp.Diff(response.New, response.Old))
-	case pbv1.Response_ADD:
-		response.Action = pbv1.Response_ADD
-	case pbv1.Response_DELETE:
-		response.Action = pbv1.Response_DELETE
+		responses = append(responses, *response)
 	}
-
-	if subChan := subscriptionManager.GetSubscriptionChannel(r.NewResource.Name); subChan != nil {
-		klog.Infof("sending vn %s to vrouter %s", response.New.GetVirtualRouter().Name, r.NewResource.Name)
-		subChan <- response
-
-	}
-
+	return responses
 }

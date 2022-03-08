@@ -3,11 +3,9 @@ package handlers
 import (
 	"fmt"
 
-	"github.com/google/go-cmp/cmp"
 	pbv1 "github.com/michaelhenkel/config_controller/pkg/apis/v1"
 	"github.com/michaelhenkel/config_controller/pkg/db"
-	"github.com/michaelhenkel/config_controller/pkg/server"
-	"github.com/michaelhenkel/config_controller/pkg/store"
+	"github.com/michaelhenkel/config_controller/pkg/graph"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
 	contrail "ssd-git.juniper.net/contrail/cn2/contrail/pkg/apis/core/v1alpha1"
@@ -18,18 +16,41 @@ func init() {
 }
 
 type VirtualNetwork struct {
-	NewResource *contrail.VirtualNetwork
-	OldResource *contrail.VirtualNetwork
-	kind        string
-	dbClient    *db.DB
+	*contrail.VirtualNetwork
+	old      *contrail.VirtualNetwork
+	kind     string
+	dbClient *db.DB
+}
+
+func (r *VirtualNetwork) ListResponses(node string) []pbv1.Response {
+	var responses []pbv1.Response
+	virtualNetwork := NewVirtualNetwork(r.dbClient)
+	//virtualNetworkList := virtualNetwork.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface", "VirtualNetwork"})
+	virtualNetworkList := virtualNetwork.Search(&graph.Node{
+		Kind: "VirtualRouter",
+		Name: node,
+	}, &graph.Node{
+		Kind: "VirtualNetwork",
+	}, []string{"VirtualMachine", "VirtualMachineInterface", "VirtualNetwork"})
+	for _, vn := range virtualNetworkList {
+		response := &pbv1.Response{
+			New: &pbv1.Resource{
+				Resource: &pbv1.Resource_VirtualNetwork{
+					VirtualNetwork: vn.VirtualNetwork,
+				},
+			},
+		}
+		responses = append(responses, *response)
+	}
+	return responses
 }
 
 func (r *VirtualNetwork) Convert(newObj interface{}, oldObj interface{}) error {
 	if newObj != nil {
-		r.NewResource = newObj.(*contrail.VirtualNetwork)
+		r.VirtualNetwork = newObj.(*contrail.VirtualNetwork)
 	}
 	if oldObj != nil {
-		r.OldResource = oldObj.(*contrail.VirtualNetwork)
+		r.old = oldObj.(*contrail.VirtualNetwork)
 	}
 	return nil
 }
@@ -40,6 +61,34 @@ func (r *VirtualNetwork) addDBClient(dbClient *db.DB) {
 
 func (r *VirtualNetwork) addKind(kind string) {
 	r.kind = kind
+}
+
+func NewVirtualNetwork(dbClient *db.DB) *VirtualNetwork {
+	return &VirtualNetwork{
+		dbClient: dbClient,
+		kind:     "VirtualNetwork",
+	}
+}
+
+func (r *VirtualNetwork) Search(from, to *graph.Node, path []string) []*VirtualNetwork {
+	var resList []*VirtualNetwork
+
+	nodeList := r.dbClient.Search(from, to, path)
+
+	for idx := range nodeList {
+		var namespacedName string
+		if nodeList[idx].Namespace != "" {
+			namespacedName = fmt.Sprintf("%s/%s", nodeList[idx].Namespace, nodeList[idx].Name)
+		} else {
+			namespacedName = nodeList[idx].Name
+		}
+		n := r.dbClient.Get(r.kind, namespacedName)
+		if r, ok := n.(*contrail.VirtualNetwork); ok {
+			virtualNetwork := &VirtualNetwork{VirtualNetwork: r}
+			resList = append(resList, virtualNetwork)
+		}
+	}
+	return resList
 }
 
 func (r *VirtualNetwork) GetReferences(obj interface{}) []contrail.ResourceReference {
@@ -59,32 +108,14 @@ func (r *VirtualNetwork) GetReferences(obj interface{}) []contrail.ResourceRefer
 	return resourceReferenceList
 }
 
-func (r *VirtualNetwork) Init() error {
-	return nil
-}
-
-func (r *VirtualNetwork) InitEdges() error {
-	return nil
-}
-
 func (r *VirtualNetwork) Add(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	//klog.Infof("adding %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
-	var namespacedName string
-	if r.NewResource.Namespace != "" {
-		namespacedName = fmt.Sprintf("%s/%s", r.NewResource.Namespace, r.NewResource.Name)
-	}
-	search := &db.Search{
-		Name:    namespacedName,
-		Kind:    r.kind,
-		DstKind: "VirtualRouter",
-		Filter:  []string{"VirtualMachine", "VirtualMachineInterface", "VirtualRouter"},
-	}
-	nList := r.dbClient.Get(search)
-	for _, n := range nList {
-		klog.Infof("%s -> %s is on %s -> %s", r.kind, namespacedName, n.Kind(), n.String())
+	virtualRouter := NewVirtualRouter(r.dbClient)
+	virtualRouterList := virtualRouter.Search(r.Name, r.Namespace, r.kind, []string{"VirtualMachine", "VirtualMachineInterface", "VirtualRouter"})
+	for _, vr := range virtualRouterList {
+		klog.Infof("%s %s/%s -> %s %s/%s", r.kind, r.Namespace, r.Name, vr.GetObjectKind().GroupVersionKind().Kind, vr.Namespace, vr.Name)
 	}
 	return nil
 }
@@ -94,8 +125,8 @@ func (r *VirtualNetwork) Update(newObj interface{}, oldObj interface{}) error {
 		return err
 	}
 
-	if !equality.Semantic.DeepDerivative(r.NewResource, r.OldResource) {
-		klog.Infof("updating %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	if !equality.Semantic.DeepDerivative(r.VirtualNetwork, r.old) {
+		klog.Infof("updating %s: %s/%s", r.kind, r.Namespace, r.Name)
 		return nil
 	}
 
@@ -106,62 +137,6 @@ func (r *VirtualNetwork) Delete(obj interface{}) error {
 	if err := r.Convert(obj, nil); err != nil {
 		return err
 	}
-	klog.Infof("deleting %s: %s/%s", r.kind, r.NewResource.Namespace, r.NewResource.Name)
+	klog.Infof("deleting %s: %s/%s", r.kind, r.Namespace, r.Name)
 	return nil
-}
-
-func (r *VirtualNetwork) sendResponse(subscriptionManager *server.SubscriptionManager, storeClient store.Store, action pbv1.Response_Action, vrouterFilter ...string) {
-	vmiList := storeClient.ListResource("VirtualMachineInterface")
-	vrouterList := storeClient.ListResource("VirtualRouter", vrouterFilter...)
-	var vrouterResponseMap = make(map[string]*pbv1.Response)
-	for _, vmiObj := range vmiList {
-		vmi, ok := vmiObj.(*contrail.VirtualMachineInterface)
-		if ok {
-			if vmi.Spec.VirtualNetworkReference.Name == r.NewResource.Name && vmi.Spec.VirtualNetworkReference.Namespace == r.NewResource.Namespace {
-				vmRefs := vmi.Spec.VirtualMachineReferences
-				for _, vrouterObj := range vrouterList {
-					vrouter, ok := vrouterObj.(*contrail.VirtualRouter)
-					if ok {
-						for _, vmRef := range vmRefs {
-							for _, vrouterVMRef := range vrouter.Spec.VirtualMachineReferences {
-								if vmRef.Name == vrouterVMRef.Name && vmRef.Namespace == vrouterVMRef.Namespace {
-									objResource := &pbv1.Resource_VirtualNetwork{
-										VirtualNetwork: r.NewResource,
-									}
-									response := &pbv1.Response{
-										New: &pbv1.Resource{
-											Resource: objResource,
-										},
-									}
-									switch action {
-									case pbv1.Response_UPDATE:
-										objResource := &pbv1.Resource_VirtualNetwork{
-											VirtualNetwork: r.OldResource,
-										}
-										response.Old = &pbv1.Resource{
-											Resource: objResource,
-										}
-										response.Action = pbv1.Response_UPDATE
-										fmt.Println(cmp.Diff(response.New, response.Old))
-									case pbv1.Response_ADD:
-										response.Action = pbv1.Response_ADD
-									case pbv1.Response_DELETE:
-										response.Action = pbv1.Response_DELETE
-									}
-									vrouterResponseMap[vrouter.Name] = response
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	for vrouter, response := range vrouterResponseMap {
-		if subChan := subscriptionManager.GetSubscriptionChannel(vrouter); subChan != nil {
-			klog.Infof("sending vn %s to vrouter %s", response.New.GetVirtualNetwork().Name, vrouter)
-			subChan <- response
-
-		}
-	}
 }
