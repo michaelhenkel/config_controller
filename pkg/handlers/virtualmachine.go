@@ -58,7 +58,7 @@ func NewVirtualMachine(dbClient *db.DB) *VirtualMachine {
 	}
 }
 
-func (r *VirtualMachine) ListResponses(node string) []pbv1.Response {
+func (r *VirtualMachine) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualMachine := NewVirtualMachine(r.dbClient)
 	virtualMachineList := virtualMachine.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface"})

@@ -20,7 +20,7 @@ type Handler interface {
 	Update(newObj interface{}, oldObj interface{}) error
 	Delete(obj interface{}) error
 	GetReferences(obj interface{}) []contrail.ResourceReference
-	ListResponses(node string) []pbv1.Response
+	FindFromNode(node string) []pbv1.Response
 	addDBClient(dbClient *db.DB)
 	addKind(kind string)
 }

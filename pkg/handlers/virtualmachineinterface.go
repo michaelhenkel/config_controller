@@ -67,7 +67,7 @@ func (r *VirtualMachineInterface) Search(name, namespace, kind string, path []st
 	return resList
 }
 
-func (r *VirtualMachineInterface) ListResponses(node string) []pbv1.Response {
+func (r *VirtualMachineInterface) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualMachineInterface := NewVirtualMachineInterface(r.dbClient)
 	virtualMachineInterfaceList := virtualMachineInterface.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface"})

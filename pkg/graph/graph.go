@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -14,32 +13,30 @@ type Node struct {
 
 // ItemGraph the Items graph
 type ItemGraph struct {
-	nodes []*Node
+	nodes map[Node]*Node
+	//nodes []*Node
 	edges map[Node][]*Node
 	lock  sync.RWMutex
 }
 
 // AddNode adds a node to the graph
-func (g *ItemGraph) AddNode(n *Node) {
+func (g *ItemGraph) AddNode(n Node) {
 	g.lock.Lock()
-	g.nodes = append(g.nodes, n)
+	if g.nodes == nil {
+		g.nodes = make(map[Node]*Node)
+	}
+	g.nodes[n] = &n
 	g.lock.Unlock()
 }
 
 // AddNode adds a node to the graph
-func (g *ItemGraph) GetNode(name, namespace, kind string) (*Node, bool) {
-	var node *Node
+func (g *ItemGraph) GetNode(node Node) (*Node, bool) {
+	found := false
 	g.lock.Lock()
-	for _, n := range g.nodes {
-		if n.Kind == kind && n.Name == name && n.Namespace == namespace {
-			node = n
-		}
-	}
+	n, ok := g.nodes[node]
+	found = ok
 	g.lock.Unlock()
-	if node != nil {
-		return node, true
-	}
-	return node, false
+	return n, found
 }
 
 // AddEdge adds an edge to the graph
@@ -51,53 +48,6 @@ func (g *ItemGraph) AddEdge(n1, n2 *Node) {
 	g.edges[*n1] = append(g.edges[*n1], n2)
 	g.edges[*n2] = append(g.edges[*n2], n1)
 	g.lock.Unlock()
-}
-
-// AddEdge adds an edge to the graph
-func (g *ItemGraph) String() {
-	g.lock.RLock()
-	s := ""
-	for i := 0; i < len(g.nodes); i++ {
-		s += g.nodes[i].Name + " -> "
-		near := g.edges[*g.nodes[i]]
-		for j := 0; j < len(near); j++ {
-			s += near[j].Name + " "
-		}
-		s += "\n"
-	}
-	fmt.Println(s)
-	g.lock.RUnlock()
-}
-
-// Traverse implements the BFS traversing algorithm
-func (g *ItemGraph) Traverse(f func(*Node)) {
-	g.lock.RLock()
-	q := NodeQueue{}
-	q.New()
-	n := g.nodes[0]
-	q.Enqueue(*n)
-	visited := make(map[*Node]bool)
-	for {
-		if q.IsEmpty() {
-			break
-		}
-		fmt.Printf("queue size %d\n", q.Size())
-		node := q.Dequeue()
-		visited[node] = true
-		near := g.edges[*node]
-
-		for i := 0; i < len(near); i++ {
-			j := near[i]
-			if !visited[j] {
-				q.Enqueue(*j)
-				visited[j] = true
-			}
-		}
-		if f != nil {
-			f(node)
-		}
-	}
-	g.lock.RUnlock()
 }
 
 func (g *ItemGraph) TraverseFrom(from *Node, to *Node, f func(*Node), filterList ...string) {
@@ -112,13 +62,9 @@ func (g *ItemGraph) TraverseFrom(from *Node, to *Node, f func(*Node), filterList
 	g.lock.RLock()
 	q := NodeQueue{}
 	q.New()
-	var n *Node
-	for idx, node := range g.nodes {
-		if g.nodes[idx].Kind == from.Kind && g.nodes[idx].Name == from.Name && g.nodes[idx].Namespace == from.Namespace {
-			n = node
-		}
-	}
-	if n == nil {
+	node := Node{Kind: from.Kind, Name: from.Name, Namespace: from.Namespace}
+	n, ok := g.GetNode(node)
+	if !ok {
 		return
 	}
 	q.Enqueue(*n)

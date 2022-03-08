@@ -13,6 +13,7 @@ import (
 	"github.com/michaelhenkel/config_controller/pkg/handlers"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -106,6 +107,9 @@ func NewSharedInformerFactory(clientSet *ClientSet, dbClient *db.DB, mu *sync.RW
 			sharedInformerMap[gvr.kind] = cInformer.Informer()
 		}
 	}
+	kubeFactory := informers.NewSharedInformerFactory(clientSet.Kube, resyncTimer)
+	namespaceInformer := kubeFactory.Core().V1().Namespaces().Informer()
+	sharedInformerMap["Namespace"] = namespaceInformer
 	return sharedInformerMap, nil
 }
 
@@ -140,7 +144,7 @@ func resourceEventHandler(handler handlers.Handler, mux *sync.RWMutex, synced *b
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			mux.RLock()
 			defer mux.RUnlock()
-			handler.Update(newObj, oldObj)
+			//handler.Update(newObj, oldObj)
 
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -173,7 +177,7 @@ func NewClient(dbClient *db.DB) *Client {
 
 func (c *Client) NewSubscriber(node string, conn chan *pbv1.Response) {
 	for _, handler := range handlers.GetHandledResources() {
-		responseList := handler.ListResponses(node)
+		responseList := handler.FindFromNode(node)
 		for _, response := range responseList {
 			response.Action = pbv1.Response_ADD
 			conn <- &response

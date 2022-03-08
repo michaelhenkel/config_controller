@@ -37,7 +37,7 @@ type control struct {
 
 type DB struct {
 	stores              map[string]cache.Store
-	graph               graph.ItemGraph
+	graph               *graph.ItemGraph
 	ctrlChan            chan control
 	stopChan            chan struct{}
 	handlerInterfaceMap map[string]HandlerInterface
@@ -46,7 +46,7 @@ type DB struct {
 func NewClient() *DB {
 	return &DB{
 		stores:   make(map[string]cache.Store),
-		graph:    graph.ItemGraph{},
+		graph:    &graph.ItemGraph{},
 		ctrlChan: make(chan control),
 		stopChan: make(chan struct{}),
 	}
@@ -80,7 +80,7 @@ func (d *DB) Init() {
 		for _, item := range items {
 			obj, ok := item.(metav1.Object)
 			if ok {
-				n := &graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res}
+				n := graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res}
 				d.graph.AddNode(n)
 				klog.Infof("added %s node %s/%s", res, obj.GetNamespace(), obj.GetName())
 			}
@@ -92,13 +92,17 @@ func (d *DB) Init() {
 			var srcNode *graph.Node
 			obj, ok := item.(metav1.Object)
 			if ok {
-				if srcNode, ok = d.graph.GetNode(obj.GetName(), obj.GetNamespace(), res); !ok {
+				node := graph.Node{Kind: res, Name: obj.GetName(), Namespace: obj.GetNamespace()}
+				srcNode, ok = d.graph.GetNode(node)
+				if !ok {
 					continue
 				}
 			}
 			referenceList := d.handlerInterfaceMap[res].GetReferences(item)
 			for _, ref := range referenceList {
-				if dstNode, ok := d.graph.GetNode(ref.Name, ref.Namespace, ref.Kind); ok {
+				node := graph.Node{Kind: ref.Kind, Name: ref.Name, Namespace: ref.Namespace}
+				dstNode, ok := d.graph.GetNode(node)
+				if ok {
 					d.graph.AddEdge(srcNode, dstNode)
 					//if srcNode.Kind() == "VirtualMachineInterface" && srcNode.String() == "ns1/pod-ns1-7f7341b9" {
 					//	klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
@@ -134,8 +138,9 @@ func (d *DB) run() {
 	for ctrl := range d.ctrlChan {
 		switch ctrl.action {
 		case add:
-			if _, ok := d.graph.GetNode(ctrl.name, ctrl.namespace, ctrl.kind); !ok {
-				d.graph.AddNode(&graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind})
+			node := graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind}
+			if _, ok := d.graph.GetNode(node); !ok {
+				d.graph.AddNode(node)
 			}
 		}
 	}

@@ -64,6 +64,10 @@ func update(response *pbv1.Response) error {
 		klog.Infof("got vmi update: new %s old %s", t.VirtualMachineInterface.Name, response.Old.GetVirtualMachineInterface().Name)
 	case *pbv1.Resource_VirtualRouter:
 		klog.Infof("got vrouter update: new %s old %s", t.VirtualRouter.Name, response.Old.GetVirtualRouter().Name)
+	case *pbv1.Resource_InstanceIP:
+		klog.Infof("got iip update: new %s old %s", t.InstanceIP.Name, response.Old.GetInstanceIP().Name)
+	case *pbv1.Resource_RoutingInstance:
+		klog.Infof("got ri update: new %s old %s", t.RoutingInstance.Name, response.Old.GetRoutingInstance().Name)
 	}
 	return nil
 }
@@ -78,6 +82,10 @@ func add(response *pbv1.Response) {
 		klog.Infof("got vrouter %s add", t.VirtualRouter.Name)
 	case *pbv1.Resource_VirtualMachine:
 		klog.Infof("got vm %s add", t.VirtualMachine.Name)
+	case *pbv1.Resource_InstanceIP:
+		klog.Infof("got iip %s add", t.InstanceIP.Name)
+	case *pbv1.Resource_RoutingInstance:
+		klog.Infof("got ri %s add", t.RoutingInstance.Name)
 	default:
 		klog.Infof("got unknown %s add", t)
 	}

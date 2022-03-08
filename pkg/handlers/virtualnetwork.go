@@ -22,10 +22,9 @@ type VirtualNetwork struct {
 	dbClient *db.DB
 }
 
-func (r *VirtualNetwork) ListResponses(node string) []pbv1.Response {
+func (r *VirtualNetwork) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualNetwork := NewVirtualNetwork(r.dbClient)
-	//virtualNetworkList := virtualNetwork.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface", "VirtualNetwork"})
 	virtualNetworkList := virtualNetwork.Search(&graph.Node{
 		Kind: "VirtualRouter",
 		Name: node,

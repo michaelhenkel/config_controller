@@ -131,7 +131,7 @@ func diffRefs(a []contrail.ResourceReference, b []contrail.ResourceReference) ([
 	return notInA, notInB
 }
 
-func (r *VirtualRouter) ListResponses(node string) []pbv1.Response {
+func (r *VirtualRouter) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualRouter := NewVirtualRouter(r.dbClient)
 	virtualRouterList := virtualRouter.Search(node, "", "VirtualRouter", []string{})
