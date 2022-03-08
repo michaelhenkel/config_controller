@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"fmt"
-
 	pbv1 "github.com/michaelhenkel/config_controller/pkg/apis/v1"
 	"github.com/michaelhenkel/config_controller/pkg/db"
 	"github.com/michaelhenkel/config_controller/pkg/graph"
@@ -22,11 +20,10 @@ type VirtualNetwork struct {
 	dbClient *db.DB
 }
 
-func (r *VirtualNetwork) ListResponses(node string) []pbv1.Response {
+func (r *VirtualNetwork) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualNetwork := NewVirtualNetwork(r.dbClient)
-	//virtualNetworkList := virtualNetwork.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface", "VirtualNetwork"})
-	virtualNetworkList := virtualNetwork.Search(&graph.Node{
+	virtualNetworkList := virtualNetwork.Search(graph.Node{
 		Kind: "VirtualRouter",
 		Name: node,
 	}, &graph.Node{
@@ -70,25 +67,16 @@ func NewVirtualNetwork(dbClient *db.DB) *VirtualNetwork {
 	}
 }
 
-func (r *VirtualNetwork) Search(from, to *graph.Node, path []string) []*VirtualNetwork {
-	var resList []*VirtualNetwork
-
+func (r *VirtualNetwork) Search(from graph.Node, to *graph.Node, path []string) map[string]*VirtualNetwork {
+	var resMap = make(map[string]*VirtualNetwork)
 	nodeList := r.dbClient.Search(from, to, path)
-
 	for idx := range nodeList {
-		var namespacedName string
-		if nodeList[idx].Namespace != "" {
-			namespacedName = fmt.Sprintf("%s/%s", nodeList[idx].Namespace, nodeList[idx].Name)
-		} else {
-			namespacedName = nodeList[idx].Name
-		}
-		n := r.dbClient.Get(r.kind, namespacedName)
+		n := r.dbClient.Get(r.kind, nodeList[idx].Name, nodeList[idx].Namespace)
 		if r, ok := n.(*contrail.VirtualNetwork); ok {
-			virtualNetwork := &VirtualNetwork{VirtualNetwork: r}
-			resList = append(resList, virtualNetwork)
+			resMap[r.Namespace+"/"+r.Name] = &VirtualNetwork{VirtualNetwork: r}
 		}
 	}
-	return resList
+	return resMap
 }
 
 func (r *VirtualNetwork) GetReferences(obj interface{}) []contrail.ResourceReference {

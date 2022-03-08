@@ -56,7 +56,7 @@ func (d *DB) AddStore(resource string, store cache.Store) {
 	d.stores[resource] = store
 }
 
-func (d *DB) Search(from *graph.Node, to *graph.Node, filter []string) []*graph.Node {
+func (d *DB) Search(from graph.Node, to *graph.Node, filter []string) []*graph.Node {
 	var nodeList []*graph.Node
 	d.graph.TraverseFrom(from, to, func(n *graph.Node) {
 		if n.Kind == to.Kind {
@@ -66,7 +66,13 @@ func (d *DB) Search(from *graph.Node, to *graph.Node, filter []string) []*graph.
 	return nodeList
 }
 
-func (d *DB) Get(kind, key string) interface{} {
+func (d *DB) Get(kind, name, namespace string) interface{} {
+	var key string
+	if namespace != "" {
+		key = fmt.Sprintf("%s/%s", namespace, name)
+	} else {
+		key = name
+	}
 	item, ok, _ := d.stores[kind].GetByKey(key)
 	if ok {
 		return item
@@ -80,8 +86,7 @@ func (d *DB) Init() {
 		for _, item := range items {
 			obj, ok := item.(metav1.Object)
 			if ok {
-				n := &graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res}
-				d.graph.AddNode(n)
+				d.graph.AddNode(graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res})
 				klog.Infof("added %s node %s/%s", res, obj.GetNamespace(), obj.GetName())
 			}
 		}
@@ -92,13 +97,13 @@ func (d *DB) Init() {
 			var srcNode *graph.Node
 			obj, ok := item.(metav1.Object)
 			if ok {
-				if srcNode, ok = d.graph.GetNode(obj.GetName(), obj.GetNamespace(), res); !ok {
+				if srcNode, ok = d.graph.GetNode(graph.Node{Name: obj.GetName(), Namespace: obj.GetNamespace(), Kind: res}); !ok {
 					continue
 				}
 			}
 			referenceList := d.handlerInterfaceMap[res].GetReferences(item)
 			for _, ref := range referenceList {
-				if dstNode, ok := d.graph.GetNode(ref.Name, ref.Namespace, ref.Kind); ok {
+				if dstNode, ok := d.graph.GetNode(graph.Node{Name: ref.Name, Namespace: ref.Namespace, Kind: ref.Kind}); ok {
 					d.graph.AddEdge(srcNode, dstNode)
 					//if srcNode.Kind() == "VirtualMachineInterface" && srcNode.String() == "ns1/pod-ns1-7f7341b9" {
 					//	klog.Infof("added edge from %s %s to %s %s", srcNode.Kind(), srcNode.String(), dstNode.Kind(), dstNode.String())
@@ -134,8 +139,8 @@ func (d *DB) run() {
 	for ctrl := range d.ctrlChan {
 		switch ctrl.action {
 		case add:
-			if _, ok := d.graph.GetNode(ctrl.name, ctrl.namespace, ctrl.kind); !ok {
-				d.graph.AddNode(&graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind})
+			if _, ok := d.graph.GetNode(graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind}); !ok {
+				d.graph.AddNode(graph.Node{Name: ctrl.name, Namespace: ctrl.namespace, Kind: ctrl.kind})
 			}
 		}
 	}

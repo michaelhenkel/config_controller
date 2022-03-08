@@ -58,7 +58,7 @@ func NewVirtualMachine(dbClient *db.DB) *VirtualMachine {
 	}
 }
 
-func (r *VirtualMachine) ListResponses(node string) []pbv1.Response {
+func (r *VirtualMachine) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualMachine := NewVirtualMachine(r.dbClient)
 	virtualMachineList := virtualMachine.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface"})
@@ -75,10 +75,9 @@ func (r *VirtualMachine) ListResponses(node string) []pbv1.Response {
 	return responses
 }
 
-func (r *VirtualMachine) Search(name, namespace, kind string, path []string) []*VirtualMachine {
-	var resList []*VirtualMachine
-
-	nodeList := r.dbClient.Search(&graph.Node{
+func (r *VirtualMachine) Search(name, namespace, kind string, path []string) map[string]*VirtualMachine {
+	var resMap = make(map[string]*VirtualMachine)
+	nodeList := r.dbClient.Search(graph.Node{
 		Name:      name,
 		Namespace: namespace,
 		Kind:      kind,
@@ -88,13 +87,12 @@ func (r *VirtualMachine) Search(name, namespace, kind string, path []string) []*
 		}, path)
 
 	for idx := range nodeList {
-		n := r.dbClient.Get("VirtualMachine", nodeList[idx].Name)
+		n := r.dbClient.Get("VirtualMachine", nodeList[idx].Name, nodeList[idx].Namespace)
 		if r, ok := n.(*contrail.VirtualMachine); ok {
-			virtualMachine := &VirtualMachine{VirtualMachine: r}
-			resList = append(resList, virtualMachine)
+			resMap[r.Namespace+"/"+r.Name] = &VirtualMachine{VirtualMachine: r}
 		}
 	}
-	return resList
+	return resMap
 }
 
 func (r *VirtualMachine) Update(newObj interface{}, oldObj interface{}) error {

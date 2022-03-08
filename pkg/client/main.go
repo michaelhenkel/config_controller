@@ -78,6 +78,10 @@ func add(response *pbv1.Response) {
 		klog.Infof("got vrouter %s add", t.VirtualRouter.Name)
 	case *pbv1.Resource_VirtualMachine:
 		klog.Infof("got vm %s add", t.VirtualMachine.Name)
+	case *pbv1.Resource_RoutingInstance:
+		klog.Infof("got ri %s add", t.RoutingInstance.Name)
+	case *pbv1.Resource_InstanceIP:
+		klog.Infof("got iip %s add", t.InstanceIP.Name)
 	default:
 		klog.Infof("got unknown %s add", t)
 	}

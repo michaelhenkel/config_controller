@@ -86,9 +86,9 @@ func (r *VirtualRouter) Delete(obj interface{}) error {
 	return nil
 }
 
-func (r *VirtualRouter) Search(name, namespace, kind string, path []string) []*VirtualRouter {
-	var resList []*VirtualRouter
-	nodeList := r.dbClient.Search(&graph.Node{
+func (r *VirtualRouter) Search(name, namespace, kind string, path []string) map[string]*VirtualRouter {
+	var resMap = make(map[string]*VirtualRouter)
+	nodeList := r.dbClient.Search(graph.Node{
 		Name:      name,
 		Namespace: namespace,
 		Kind:      kind,
@@ -98,13 +98,12 @@ func (r *VirtualRouter) Search(name, namespace, kind string, path []string) []*V
 		}, path)
 
 	for idx := range nodeList {
-		n := r.dbClient.Get(r.kind, nodeList[idx].Name)
+		n := r.dbClient.Get(r.kind, nodeList[idx].Name, nodeList[idx].Namespace)
 		if r, ok := n.(*contrail.VirtualRouter); ok {
-			virtualRouter := &VirtualRouter{VirtualRouter: r}
-			resList = append(resList, virtualRouter)
+			resMap[r.Namespace+"/"+r.Name] = &VirtualRouter{VirtualRouter: r}
 		}
 	}
-	return resList
+	return resMap
 }
 
 func diffRefs(a []contrail.ResourceReference, b []contrail.ResourceReference) ([]contrail.ResourceReference, []contrail.ResourceReference) {
@@ -131,7 +130,7 @@ func diffRefs(a []contrail.ResourceReference, b []contrail.ResourceReference) ([
 	return notInA, notInB
 }
 
-func (r *VirtualRouter) ListResponses(node string) []pbv1.Response {
+func (r *VirtualRouter) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualRouter := NewVirtualRouter(r.dbClient)
 	virtualRouterList := virtualRouter.Search(node, "", "VirtualRouter", []string{})

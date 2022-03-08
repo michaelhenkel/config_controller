@@ -13,6 +13,7 @@ import (
 	"github.com/michaelhenkel/config_controller/pkg/handlers"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -86,13 +87,10 @@ func NewSharedInformerFactory(clientSet *ClientSet, dbClient *db.DB, mu *sync.RW
 
 	var sharedInformerMap = make(map[string]cache.SharedInformer)
 
-	/*
-		kubeFactory := informers.NewSharedInformerFactory(clientSet.Kube, resyncTimer)
-		namespaceInformer := kubeFactory.Core().V1().Namespaces().Informer()
-		storeClient.Add("Namespace", namespaceInformer.GetStore())
-		namespaceInformer.AddEventHandler(resourceEventHandler(handlers.NewHandler("Namespace"), mu, synced))
-		sharedInformerMap["Namespace"] = namespaceInformer
-	*/
+	kubeFactory := informers.NewSharedInformerFactory(clientSet.Kube, resyncTimer)
+	namespaceInformer := kubeFactory.Core().V1().Namespaces().Informer()
+	namespaceInformer.AddEventHandler(resourceEventHandler(handlers.NewHandler("Namespace", dbClient), mu, synced))
+	sharedInformerMap["Namespace"] = namespaceInformer
 
 	handledResources := handlers.GetHandledResources()
 	contrailFactory := contrailInformer.NewSharedInformerFactory(clientSet.Contrail, resyncTimer)
@@ -171,12 +169,12 @@ func NewClient(dbClient *db.DB) *Client {
 	}
 }
 
-func (c *Client) NewSubscriber(node string, conn chan *pbv1.Response) {
+func (c *Client) NewSubscriber(node string, conn chan pbv1.Response) {
 	for _, handler := range handlers.GetHandledResources() {
-		responseList := handler.ListResponses(node)
+		responseList := handler.FindFromNode(node)
 		for _, response := range responseList {
 			response.Action = pbv1.Response_ADD
-			conn <- &response
+			conn <- response
 		}
 	}
 }
@@ -212,8 +210,8 @@ func (c *Client) Start() error {
 			c.dbClient.AddHandlerInterface(kind, handler)
 		}
 		c.dbClient.Init()
-		klog.Info("starting watch in 5 sec")
-		time.Sleep(time.Second * 5)
+		klog.Info("starting watch in 1 sec")
+		time.Sleep(time.Second * 1)
 		c.initialized = true
 		mux.Unlock()
 	}

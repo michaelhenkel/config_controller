@@ -25,7 +25,7 @@ func (sm *SubscriptionManager) RemoveSubscription(node string) {
 	delete(sm.Subscriptions, node)
 }
 
-func (sm *SubscriptionManager) GetSubscriptionChannel(node string) chan *pbv1.Response {
+func (sm *SubscriptionManager) GetSubscriptionChannel(node string) chan pbv1.Response {
 	if subscription, ok := sm.Subscriptions[node]; ok {
 		return subscription.Channel
 	}
@@ -41,7 +41,7 @@ func NewSubscriptionManager(newSubscriberChan chan string) *SubscriptionManager 
 }
 
 type Subscription struct {
-	Channel chan *pbv1.Response
+	Channel chan pbv1.Response
 	Init    bool
 }
 
@@ -60,7 +60,7 @@ func New(subscriptionManager *SubscriptionManager, k8sClient *k8s.Client) *Confi
 }
 
 func (c *ConfigController) SubscribeListWatch(req *pbv1.SubscriptionRequest, srv pbv1.ConfigController_SubscribeListWatchServer) error {
-	conn := make(chan *pbv1.Response)
+	conn := make(chan pbv1.Response)
 	c.SubscriptionManager.AddSubscription(req.Name, Subscription{
 		Channel: conn,
 		Init:    false,
@@ -74,7 +74,7 @@ func (c *ConfigController) SubscribeListWatch(req *pbv1.SubscriptionRequest, srv
 				c.SubscriptionManager.RemoveSubscription(req.GetName())
 				stopChan <- struct{}{}
 			case response := <-conn:
-				if status, ok := status.FromError(srv.Send(response)); ok {
+				if status, ok := status.FromError(srv.Send(&response)); ok {
 					switch status.Code() {
 					case codes.OK:
 					case codes.Unavailable, codes.Canceled, codes.DeadlineExceeded:

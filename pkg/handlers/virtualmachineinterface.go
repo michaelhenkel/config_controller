@@ -46,9 +46,9 @@ func NewVirtualMachineInterface(dbClient *db.DB) *VirtualMachineInterface {
 	}
 }
 
-func (r *VirtualMachineInterface) Search(name, namespace, kind string, path []string) []*VirtualMachineInterface {
-	var resList []*VirtualMachineInterface
-	nodeList := r.dbClient.Search(&graph.Node{
+func (r *VirtualMachineInterface) Search(name, namespace, kind string, path []string) map[string]*VirtualMachineInterface {
+	var resMap = make(map[string]*VirtualMachineInterface)
+	nodeList := r.dbClient.Search(graph.Node{
 		Name:      name,
 		Namespace: namespace,
 		Kind:      kind,
@@ -58,16 +58,15 @@ func (r *VirtualMachineInterface) Search(name, namespace, kind string, path []st
 		}, path)
 
 	for idx := range nodeList {
-		n := r.dbClient.Get("VirtualMachineInterface", nodeList[idx].Name)
+		n := r.dbClient.Get("VirtualMachineInterface", nodeList[idx].Name, nodeList[idx].Namespace)
 		if r, ok := n.(*contrail.VirtualMachineInterface); ok {
-			virtualMachineInterface := &VirtualMachineInterface{VirtualMachineInterface: r}
-			resList = append(resList, virtualMachineInterface)
+			resMap[r.Namespace+"/"+r.Name] = &VirtualMachineInterface{VirtualMachineInterface: r}
 		}
 	}
-	return resList
+	return resMap
 }
 
-func (r *VirtualMachineInterface) ListResponses(node string) []pbv1.Response {
+func (r *VirtualMachineInterface) FindFromNode(node string) []pbv1.Response {
 	var responses []pbv1.Response
 	virtualMachineInterface := NewVirtualMachineInterface(r.dbClient)
 	virtualMachineInterfaceList := virtualMachineInterface.Search(node, "", "VirtualRouter", []string{"VirtualMachine", "VirtualMachineInterface"})
