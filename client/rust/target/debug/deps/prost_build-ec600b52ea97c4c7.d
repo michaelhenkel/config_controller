@@ -1,0 +1,16 @@
+/home/mhenkel/go/src/github.com/michaelhenkel/config_controller/client/rust/target/debug/deps/prost_build-ec600b52ea97c4c7.rmeta: /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/lib.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ast.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/code_generator.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/extern_paths.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ident.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/message_graph.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/path.rs
+
+/home/mhenkel/go/src/github.com/michaelhenkel/config_controller/client/rust/target/debug/deps/libprost_build-ec600b52ea97c4c7.rlib: /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/lib.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ast.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/code_generator.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/extern_paths.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ident.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/message_graph.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/path.rs
+
+/home/mhenkel/go/src/github.com/michaelhenkel/config_controller/client/rust/target/debug/deps/prost_build-ec600b52ea97c4c7.d: /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/lib.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ast.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/code_generator.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/extern_paths.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ident.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/message_graph.rs /home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/path.rs
+
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/lib.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ast.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/code_generator.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/extern_paths.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/ident.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/message_graph.rs:
+/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/src/path.rs:
+
+# env-dep:PROTOC=/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/third-party/protobuf/protoc-linux-x86_64
+# env-dep:PROTOC_INCLUDE=/home/mhenkel/.cargo/registry/src/github.com-1ecc6299db9ec823/prost-build-0.9.0/third-party/protobuf/include
